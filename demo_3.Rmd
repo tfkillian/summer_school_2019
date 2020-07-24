@@ -1,0 +1,560 @@
+---
+title: "demo_2"
+author: "Theo Killian"
+date: "July 1, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Practical: 03: Core approaches in Bioconductor
+
+"My favorite gene is found on what chromasome?"
+
+### Core infrastructure
+
+S4 Objects. Why? Interoperability. Robustness. What? Interface (what you want to
+know about) and implementation (what you don’t want to know about!)
+
+```{r library}
+library(Biostrings)
+```
+
+```{r}
+head(methods(class = "DNAStringSet") )
+```
+
+### Biostrings
+
+DNA, amino acid, and other biological sequences. See earlier example in 01:
+Introdction to R and Bioconductor.
+
+### GRanges
+
+GRanges(): genomic coordinates to represent annotations (exons, genes,
+regulatory marks, ...) and data (called peaks, variants, aligned reads)
+
+GRangesList(): genomic coordinates grouped into list elements (e.g., paired-end
+reads; exons grouped by transcript)
+
+```{r}
+library(GenomicRanges)
+```
+
+```{r}
+exon <- GRanges(c("chr1:20-30:+", "chr1:40-50:+", "chr1:45-55:+"))
+# three ranges on chromasome 1 (don't necessarily have to be chromasomes, could
+# be contigs) and says that it's on the "+" strand
+exon
+```
+
+```{r}
+start(exon)
+```
+
+```{r}
+end(exon)
+```
+
+```{r}
+width(exon)
+```
+
+```{r}
+disjoin(exon)
+```
+
+```{r}
+# create SNP
+snp <- GRanges(c("chr1:12345", "chr1:23456"))
+snp
+
+```
+
+```{r}
+countOverlaps(snp, exon)
+```
+
+```{r}
+countOverlaps(exon, snp)
+```
+
+```{r}
+snp %over% exon
+```
+
+```{r}
+snp[snp %over% exon]
+```
+
+```{r}
+promoters(exon)
+```
+
+```{r}
+cvg <- coverage(exon)
+# returns compact representation of "Rle" run length encoding
+# coverage(exon) %>% unlist() %>% as.integer()
+```
+
+```{r}
+# as(cvg, GRanges)
+# cvg
+grcvg <- cvg %>% as("GRanges")
+```
+
+```{r}
+mcols(grcvg)
+```
+
+```{r}
+df <- DataFrame(i = 1:3, dna = DNAStringSet(c("AAA", "CCC", "GGG")), gr = exon,
+                green = "Recycle!")
+```
+
+
+```{r}
+gr <- GRanges("A", IRanges(c(10, 20, 22), width=5), "+")
+shift(gr, 1)                            # intra-range
+```
+
+```{r}
+range(gr)                               # inter-range
+```
+
+```{r}
+reduce(gr)                              # inter-range
+```
+
+```{r}
+snps <- GRanges("A", IRanges(c(11, 17, 24), width=1))
+findOverlaps(snps, gr)                  # between-range
+```
+
+```{r}
+setdiff(range(gr), gr)                  # 'introns'
+```
+
+### SummarizedExperiment
+
+```{r}
+## always use BioManager::install("package")
+## because it looks on CRAN and Bioconductor
+
+library(SummarizedExperiment)
+library(airway)
+library(ggplot2)
+library(dplyr)
+library(rtracklayer)
+```
+
+```{r}
+data(airway)
+airway
+```
+
+```{r}
+colData(airway)
+```
+
+```{r}
+dim(assay(airway))
+# head(assay(airway))
+```
+
+```{r}
+airway[, airway$dex %in% "trt"]
+```
+
+```{r}
+chr14 <- as(seqinfo(rowRanges(airway)), "GRanges")["14"]
+airway[airway %over% chr14,]
+```
+
+```{r}
+colSums(assay(airway))
+```
+
+```{r}
+rowRanges(airway)
+```
+
+```{r}
+metadata(airway)
+```
+
+### The matrix-like behavior of SummarizedExperiment
+
+```{r}
+set.seed(123)
+m <- matrix(rnorm(12), nrow = 4, ncol = 3,
+    dimnames = list(letters[1:4], LETTERS[1:3]))
+m
+```
+
+```{r}
+dim(m)
+```
+
+```{r}
+m[1:2, 2:1]
+```
+
+```{r}
+m[1:2,]
+```
+
+```{r}
+m[1,]
+```
+
+```{r}
+m[,1]
+```
+
+```{r}
+m[ 1, , drop = FALSE]
+```
+
+### Basic summaries of assay() values
+
+```{r}
+m
+m+1
+```
+
+```{r}
+# or applying a transformation
+abs(m + 1)
+```
+
+```{r}
+colSums(assay(airway))
+# pretty sure that these are gene counts per sample
+```
+
+```{r}
+rowMeans(assay(airway))
+# average of the rows is sort of like the mean expression of the gene
+```
+
+```{r}
+hist(rowMeans(assay(airway)))
+```
+
+### Subsetting SummarizedExperiment
+
+```{r}
+airway$dex
+# pick out untreated samples
+```
+
+```{r}
+untreated <- airway$dex == "untrt"
+untreated_subset <- airway[,untreated]
+untreated_subset$dex
+## better
+untrt <- airway[, airway$dex == "untrt"]
+ridx <- rowSums(assay(airway)) > 0
+head(ridx)
+```
+
+```{r}
+sum(ridx/length(ridx))
+```
+
+```{r}
+table(ridx)
+```
+
+```{r}
+nonzero_airway <- airway[ridx, ]
+```
+
+```{r}
+hist(rowMeans(log(assay(nonzero_airway) + 1)))
+```
+
+### The list-like interface of GRangesList
+
+```{r}
+l <- list(a = 1:5, b = month.abb)
+```
+
+```{r}
+names(l)
+```
+
+```{r}
+length(l)
+```
+
+```{r}
+l[c(2, 1)]
+```
+
+```{r}
+l[2] # list of length 1, containing element 2 of original list
+```
+
+```{r}
+l[[2]]     # element 2 of original list
+# double square bracket subsetting is now outside of the list, now it's a vector 
+```
+
+```{r}
+ridx <- rowMeans(x) > 0
+m[ridx, , drop=FALSE]
+```
+
+```{r}
+# remove assay rows that are all zero
+ridx <- rowSums(assay(airway)) > 0
+
+# get non-zero rows
+se <- airway[ridx,]
+
+# transform into pseudolog
+ave_log_expr <- rowMeans(log(1 + assay(se)))
+
+# transform into vector
+tbl <- tibble::enframe(ave_log_expr, "gene", "ave_log_expr")
+
+# NOTE: enframe()
+# Converting vectors to data frames, and vice versa!!!
+ggplot(tbl, aes(ave_log_expr)) + geom_density()
+```
+
+```{r}
+r <- rowRanges(airway)
+r
+```
+
+```{r}
+seqinfo(r)
+```
+
+```{r}
+seqinfo(r) %>% as("GRanges") %>% subset(seqnames == 14)
+```
+
+```{r}
+rowRanges(airway) %over% chr14
+```
+
+## From files to Bioconductor objects
+
+```{r}
+
+```
+
+```{r}
+data(cpgIslands, package="Gviz")
+cpgIslands$name <- letters[1:10]
+cpgIslands$score <- sample(10)
+cpgIslands
+```
+
+```{r}
+bed_file <- tempfile(fileext = ".bed")
+basename(bed_file)
+```
+
+```{r}
+export(cpgIslands, bed_file)
+cat(readLines(bed_file), sep = "\n")
+```
+
+```{r}
+import(bed_file)
+```
+
+```{r}
+gtf <- system.file(package = "airway", "extdata",
+                   "Homo_sapiens.GRCh37.75_subset.gtf")
+import(gtf)
+```
+
+### FASTQ files
+
+```{r}
+
+```
+
+### The GenomicAlignments package
+
+```{r}
+library(GenomicAlignments)
+```
+
+```{r}
+sessionInfo()
+```
+
+## 05: Bioconductor Annotation Resources
+
+```{r}
+# https://uclouvain-cbio.github.io/BSS2019/05_Annotations.html
+BiocManager::available("^org\\.")
+```
+
+```{r}
+library(AnnotationHub)
+query(AnnotationHub(), "^org\\.")
+```
+
+```{r}
+library(org.Hs.eg.db)
+```
+
+```{r}
+head(keys(org.Hs.eg.db))
+```
+
+```{r}
+eid <- sample(keys(org.Hs.eg.db), 10)
+```
+
+```{r}
+mapIds(org.Hs.eg.db, eid, "SYMBOL", "ENTREZID")
+```
+
+```{r}
+map <- select(org.Hs.eg.db, eid, c("SYMBOL", "GO"), "ENTREZID")
+```
+
+```{r}
+dim(map)
+```
+
+```{r}
+head(map)
+```
+
+### GO.db
+
+```{r}
+library(GO.db)
+```
+
+### Transcript annotations
+
+TxDb.Hsapiens.UCSC.hg38.knownGene
+
+TxDb packages contain information about gene models (exon, gene, transcript
+coordinates). There are a number of TxDb packages available to install
+
+```{r}
+library(dplyr)    # for `%>%`
+```
+
+```{r}
+BiocManager::available("^TxDb") %>% tibble::enframe(name = NULL)
+```
+
+and to download from AnnotationHub...
+
+```{r}
+query(AnnotationHub(), "^TxDb\\.")
+```
+
+```{r}
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+```
+
+### exons(), transcripts(), genes()
+
+```{r}
+exons(TxDb.Hsapiens.UCSC.hg38.knownGene)
+```
+
+```{r}
+ex <- exons(TxDb.Hsapiens.UCSC.hg38.knownGene, columns = "GENEID")
+ex
+```
+
+```{r}
+std_ex <- keepStandardChromosomes(ex, pruning.mode="coarse")
+std_ex
+```
+
+```{r}
+table(seqnames(std_ex))
+```
+
+```{r}
+std_ex[width(std_ex) > 10000]
+```
+
+### ensembldb
+
+```{r}
+library(ensembldb)
+```
+
+```{r}
+query(AnnotationHub(), c("^EnsDb\\.", "Ensembl 96"))
+```
+
+### Accessing online resources (biomart)
+
+```{r}
+library(biomaRt)
+head(listMarts(), 3)                      ## list marts
+head(listDatasets(useMart("ensembl")), 3) ## mart datasets
+ensembl <-                                ## fully specified mart
+    useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+head(listFilters(ensembl), 3)             ## filters
+myFilter <- "chromosome_name"
+substr(filterOptions(myFilter, ensembl), 1, 50) ## return values
+myValues <- c("21", "22")
+head(listAttributes(ensembl), 3)          ## attributes
+myAttributes <- c("ensembl_gene_id","chromosome_name")
+
+## assemble and query the mart
+res <- getBM(attributes =  myAttributes, filters =  myFilter,
+             values =  myValues, mart = ensembl)
+```
+
+### KEGGREST
+
+```{r}
+library(KEGGREST)
+```
+
+### AnnotationHub
+
+AnnotationHub provides a resource of annotations that are available without
+requiring an annotation package.
+
+```{r}
+library(AnnotationHub)
+ah <- AnnotationHub()
+```
+
+```{r}
+query(ah, "^org\\.")
+```
+
+```{r}
+# ah["AH70563"]
+# unique(ah$species)
+
+# find out if contains string
+# grepl(ah$species, "Homo")
+# azolla <- subset(ah, species %in% "Homo")
+# pmatch(ah$species, "azolla")
+```
+
+```{r}
+org <- ah[["AH70563"]]
+```
+
+```{r}
+AnnotationDbi::select(GO.id, gid, c("ENTREZID", "SYMBOL", "ENSEMBL"))
+```
+```
+

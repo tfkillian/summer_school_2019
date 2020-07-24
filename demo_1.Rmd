@@ -1,0 +1,142 @@
+---
+title: "demo"
+author: "Theo Killian"
+date: "July 1, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Basic R tutorial (Martin)
+
+```{r pressure, echo=FALSE}
+x <- rnorm(100)
+idx = x > 0
+xp = x[idx]
+
+# length(x)
+# class(x)
+# mean(x)
+# var(x)
+# hist(x)
+y = x + rnorm(100)
+
+plot(x, y)
+df = data.frame(x, y)
+# dim(df)
+df[c(1, 2, 4, 6), ]
+
+# pos = df[ df$x > 0, ]
+# head(pos)
+# rm(x, y)
+
+## NOTE: yeah, yeah, I know know how to do this, I'm not an idiot, lol
+```
+
+```{r}
+# plot(x, y, df[df$x > 0, ])
+lm(y ~ x, df)
+fit = (lm(y ~ x, df))
+xx = anova(fit)
+# abline(fit)
+plot(fit)
+## NOTE: we invoked a plot on an object of class 'lm'
+## we want ?help on ?plot.lm
+```
+
+```{r}
+library("ggplot2")
+library("viridis")
+# ggplot(df, aes(x, y)) # just makes bar plot, doesn't do shit yet
+# ggplot(df, aes(x, y, color = y)) + geom_point() + geom_smooth() + scale_color_viridis()
+ggplot(df, aes(x = x, y = y, color = y)) + geom_point() +
+    geom_smooth(method = "lm") + scale_color_viridis() + ggtitle("Basic ggplot")
+```
+
+## Tidyr
+
+```{r}
+## we'll get to this later
+```
+
+## Bioconductor
+
+```{r}
+library(Biostrings)
+```
+
+```{r}
+seq = c("AAACA", "CATGC")
+# class(seq)
+dna <- DNAStringSet(seq) # creating object that contains DNA sequence
+reverseComplement(dna)
+## NOTE: non-ATGC letters represent ambiguity in sequence string
+DNA_ALPHABET
+```
+
+```{r}
+dm3_upstream_file <-
+    system.file(package = "Biostrings", "extdata", "dm3_upstream2000.fa.gz")
+# readLines(dm3_upstream_file, 10) # reads first 10 lines
+readLines(dm3_upstream_file) ## aaaah, os many lines!
+# gc = readLines(dm3_upstream_file, "GC", as.prob = TRUE)
+```
+
+```{r}
+dna <- readDNAStringSet(dm3_upstream_file)
+dna
+```
+
+```{r}
+gc <- letterFrequency(dna, "GC", as.prob = TRUE)
+hist(gc)
+```
+
+```{r}
+library(BSgenome)
+library(BSgenome.Hsapiens.UCSC.hg38)
+```
+
+```{r}
+BSgenome.Hsapiens.UCSC.hg38
+```
+
+```{r}
+chr17 <- BSgenome.Hsapiens.UCSC.hg38[["chr17"]]
+chr17
+```
+
+```{r}
+letterFrequency(chr17, "GC", as.prob = TRUE)
+```
+
+## Rmarkdown (Laurent)
+
+**two stars bolds** *one star italics* 
+
+```{r cache, cache=TRUE}
+# cache will cache the code chunk (say if you code is really time-consuming)
+```
+
+```{r table}
+DT::datatable(cars)
+```
+
+## Session information
+
+```{r sessioninfo, echo = TRUE}
+sessionInfo()
+```
+
+
+## Airway
+
+```{r cars}
+airway_read_counts <- read.csv("~/tmp/summer_school/extdata/airway-read-counts.csv")
+```
+
+## Including Plots
+
+

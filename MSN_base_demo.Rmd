@@ -1,0 +1,204 @@
+---
+title: "MSN_base_demo"
+author: "Theo Killian"
+date: "July 5, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Protein MS
+
+```{r}
+library("MSnbase")
+library("msdata")
+```
+
+```{r}
+basename(fl3 <- msdata::proteomics(full.name = TRUE, pattern = "MS3TMT11"))
+
+## [1] "MS3TMT11.mzML"
+
+(rw3 <- readMSData(fl3, mode = "onDisk"))
+```
+
+```{r}
+table(msLevel(rw3), centroided(rw3))
+```
+
+```{r}
+## extract row?? 
+rw3[[1]]
+```
+
+### Loading identification data
+
+```{r}
+basename(idf <- msdata::ident(full.name = TRUE))
+
+## [1] "TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzid"
+
+iddf <- readMzIdData(idf)
+
+library("ggplot2")
+ggplot(iddf, aes(x = MS.GF.RawScore, colour = isDecoy)) +
+    geom_density()
+```
+
+### Combining raw and identification data
+
+```{r}
+basename(quantFile <- dir(system.file(package = "MSnbase", dir = "extdata"),
+                 full.name = TRUE, pattern = "mzXML$"))
+
+## [1] "dummyiTRAQ.mzXML"
+```
+
+```{r}
+# systemfile where package is installed
+basename(identFile <- dir(system.file(package = "MSnbase", dir = "extdata"),
+                          full.name = TRUE, pattern = "dummyiTRAQ.mzid"))
+
+## [1] "dummyiTRAQ.mzid"
+```
+
+```{r}
+msexp <- readMSData(quantFile)
+fvarLabels(msexp)
+```
+
+```{r}
+msexp <- addIdentificationData(msexp, identFile)
+fvarLabels(msexp)
+```
+
+### Quantitative data
+
+```{r}
+data(itraqdata)
+itraqdata
+```
+
+```{r}
+msnset <- quantify(itraqdata, method = "trap", reporters = iTRAQ4)
+msnset
+```
+
+```{r}
+View(fData(msnset))
+```
+
+```{r}
+plot(itraqdata[[1]], reporters = iTRAQ4, full = TRUE)
+```
+
+```{r}
+exprs(msnset)[1, ]
+```
+
+```{r}
+fData(msnset)[1, ]
+```
+
+```{r}
+## need to download data
+f <- "cptac_peptides.txt"
+getEcols(f, split = "\t")
+
+```
+
+```{r}
+# what are the columns that begin with Intensity
+e <- grepEcols(f, "Intensity ", split = "\t") ## careful at the space!
+(cptac <- readMSnSet2(f, ecol = e,
+                      fnames = "Sequence",
+                      sep = "\t"))
+```
+
+```{r}
+cptac <- selectFeatureData(cptac)
+```
+
+```{r}
+cptac <- selectFeatureData(cptac,
+                           fcol = c("Proteins",
+                                    "Potential.contaminant",
+                                    "Reverse",
+                                    "Sequence"))
+```
+
+```{r}
+## annotations
+cptac$group <- rep(c("6A", "6B"), each = 3)
+cptac$sample <- rep(7:9, 2)
+sampleNames(cptac) <- sub("Intensity.", "", sampleNames(cptac))
+pData(cptac)
+```
+
+### Data processing
+
+```{r}
+# Filtering out contaminants
+table(sel_conts <- fData(cptac)$Potential.contaminant != "+")
+```
+
+```{r}
+# proteins that have contaminants on reverse
+table(sel_rev <- fData(cptac)$Reverse != "+")
+```
+
+```{r}
+(cptac <- cptac[sel_conts & sel_rev, ])
+```
+
+### Notes on missing values
+
+```{r}
+exprs(cptac)[exprs(cptac) == 0] <- NA
+table(is.na(exprs(cptac)))
+```
+
+```{r}
+napac <- cptac
+exprs(napac)[!is.na(exprs(napac))] <- 1
+naplot(napac)
+```
+
+```{r}
+fData(cptac)$nNA <- apply(exprs(cptac), 1, function(x) sum(is.na(x)))
+table(fData(cptac)$nNA)
+```
+
+```{r}
+## how to get rid of proteins with missing values
+## we use this our of simplicity
+(cptac <- filterNA(cptac))
+
+## but maybe not a genious idea to get rid of NA or 0 values, because your
+## peptide might not ionize at all
+```
+
+### Log transformation
+
+```{r}
+(cptac <- log(cptac, base = 2))
+```
+
+### Normalisation
+
+```{r}
+(cptac <- normalise(cptac, method = "quantiles"))
+```
+
+### Summarisation
+
+```{r}
+(cptac <- combineFeatures(cptac, fcol = "Proteins", method = "mean"))
+```
+
+```{r}
+sessionInfo()
+```
+

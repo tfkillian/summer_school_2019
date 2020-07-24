@@ -1,0 +1,161 @@
+---
+title: "demo_5"
+author: "Theo Killian"
+date: "July 1, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## GSEA
+
+Either your gene is in the gene set or not. Differentially expressed or not. 
+
+Enrichment score, sort genes bv log fold change, sort of a random walk
+
+Self-contained null (the genes do not have any association with the subject
+condition)
+
+You want to permute subjects
+
+The general answer is no, you shouldn't throw out non-significant genes
+
+"tibbles don't believe in row names"
+
+Goana compares your subset with the universe of all possible genes, and looks at
+GO terms for "Hs" (human, for example), returns a tibble of the GO terms that
+are significantly expressed
+
+"Deep diving, bringing up shadowy gold"
+
+## Theory
+
+See [slides][]
+
+<!-- [slides]: https:// -->
+
+## Benchmarking: a recent tweet...
+
+A recent [tweet][] provides a nice summary of efforts to benchmark
+gene set enrichement analysis methods using the [GSEABenchmarkR][]
+package.
+
+```{r, message=FALSE}
+library(EnrichmentBrowser)
+```
+
+# Practice
+
+```{r, message = FALSE, echo = FALSE}
+library(DESeq2)
+library(airway)
+library(dplyr)
+library(org.Hs.eg.db)
+library(GO.db)
+library(limma)
+```
+
+Data input and massage
+
+```{r}
+library(airway)
+data(airway)
+airway$dex <- relevel(airway$dex, "untrt")
+```
+
+Differential expression analysis
+
+```{r}
+library(DESeq2)
+des <- DESeqDataSet(airway, design = ~ cell + dex)
+des <- DESeq(des)
+res <- results(des)
+```
+
+Transition to tidy data
+
+```{r}
+library(dplyr)
+library(tibble)
+tbl <- res %>%
+    as.data.frame() %>%
+    rownames_to_column("ENSEMBL") %>%
+    as_tibble()
+tbl
+```
+
+## Example: hypergeometric test using [limma][]`::goana()`
+
+Requires ENTREZ identifiers
+
+```{r}
+library(org.Hs.eg.db)
+tbl <- tbl %>% 
+    mutate(
+        ENTREZID = mapIds(
+            org.Hs.eg.db, ENSEMBL, "ENTREZID", "ENSEMBL"
+        ) %>% unname()
+    )
+tbl
+```
+
+Universe -- must be testable for DE
+
+```{r}
+tbl <- tbl %>% 
+    filter(!is.na(padj), !is.na(ENTREZID))
+tbl
+```
+
+[limma][]`::goana()` -- Hypergeometric
+
+```{r}
+library(limma)
+go <- 
+    goana(tbl$ENTREZID[tbl$padj < .05], tbl$ENTREZID, "Hs") %>%
+    as_tibble()
+```
+
+Hmm, `goana()` returns GO terms, but we also need GO identifiers
+
+```{r}
+library(GO.db)
+go <- 
+    go %>%
+    mutate(
+        GOID = mapIds(
+            GO.db, .$Term, "GOID", "TERM"
+        ) %>% unname()
+    ) %>%
+    select(GOID, everything()) %>% 
+    arrange(P.DE)
+```
+
+Sanity check
+
+```{r}
+go %>% filter(grepl("glucocorticoid", Term))
+```
+
+What genes in set?
+
+```{r}
+genesets <- 
+    AnnotationDbi::select(org.Hs.eg.db, tbl$ENTREZID, "GO", "ENTREZID") %>%
+    as_tibble() %>%
+    select(ENTREZID, GO, ONTOLOGY) %>%
+    distinct()
+genesets
+```
+
+# Provenance
+
+```{r}
+sessionInfo()
+```
+
+[limma]: https://bioconductor.org/packages/limma
+[GSEABenchmarkR]: https://bioconductor.org/packages/GSEABenchmarkR
+[tweet]: https://twitter.com/LeviWaldron1/status/1142092301403115521
